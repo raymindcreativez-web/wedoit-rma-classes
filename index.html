@@ -92,8 +92,14 @@
     </section>
 
     <section class="card mt-6 rounded-[2rem] p-6 sm:p-8 fade-up flex flex-col sm:flex-row items-center gap-6" style="animation-delay:.1s">
-      <div class="bg-white rounded-3xl p-4 shadow-sm border border-emerald-100 shrink-0"><canvas id="images/qr.png" width="150" height="150"></canvas></div>
-      <div class="text-center sm:text-left"><h2 class="display text-2xl sm:text-3xl font-bold text-emerald-950 leading-tight">Scan to Open This Form</h2><p class="mt-2 text-sm sm:text-base text-slate-600 leading-relaxed max-w-xl">This QR code points directly to the live intake form on GitHub Pages. Scan it with any mobile device to quickly submit new class entries on the go.</p></div>
+      <div class="bg-white rounded-3xl p-4 shadow-sm border border-emerald-100 shrink-0 flex items-center justify-center w-[182px] h-[182px]">
+        <img id="qr-img" src="images/qr.png" alt="QR Code" class="w-[150px] h-[150px] rounded-xl object-contain block" onerror="handleQRError(this)">
+        <canvas id="qr-canvas" width="150" height="150" class="hidden"></canvas>
+      </div>
+      <div class="text-center sm:text-left">
+        <h2 class="display text-2xl sm:text-3xl font-bold text-emerald-950 leading-tight">Scan to Open This Form</h2>
+        <p class="mt-2 text-sm sm:text-base text-slate-600 leading-relaxed max-w-xl">This QR code points directly to the live intake form on GitHub Pages. Scan it with any mobile device to quickly submit new class entries on the go.</p>
+      </div>
     </section>
 
     <section id="thankyou-card" class="hidden card mt-6 rounded-[2rem] p-7 sm:p-9 text-center relative overflow-hidden">
@@ -286,7 +292,18 @@
     
     // --- Actions & Events ---
     function exportCSV(){if(!records.length){toast('No data to export.','error');return} const headers=['Adviser','Grade Level','Section','Male Count','Female Count','Total Count','Submitted At']; const rows=records.map(r=>[r.adviser_name,r.grade_level,r.section,r.male_count,r.female_count,r.total_count,r.submitted_at]); const csv=[headers,...rows].map(row=>row.map(c=>'"'+String(c??'').replaceAll('"','""')+'"').join(',')).join('\n'); const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'}), url=URL.createObjectURL(blob), a=document.createElement('a'); a.href=url; a.download='rapid-math-assessment-records.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); toast('CSV exported.')}
+    
     function generateQR(){const canvas=$('qr-canvas'); if(window.QRCode&&canvas) QRCode.toCanvas(canvas, 'https://raymindcreativez-web.github.io/wedoit-rma-classes/',{width:150,margin:1,color:{dark:'#047857',light:'#ffffff'}},()=>{})}
+    
+    // Handle image rendering fallback gracefully
+    function handleQRError(img) {
+      img.classList.add('hidden');
+      const canvas = $('qr-canvas');
+      if (canvas) {
+        canvas.classList.remove('hidden');
+        generateQR();
+      }
+    }
     
     maleInput.addEventListener('input',recalcTotal); 
     femaleInput.addEventListener('input',recalcTotal); 
@@ -365,6 +382,8 @@
       load(); 
       recalcTotal(); 
       renderAll(); 
+      
+      // If the image loads successfully, generateQR isn't immediately visible, but we initialize anyway
       generateQR();
     });
   </script>
