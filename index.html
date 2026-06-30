@@ -205,7 +205,7 @@
     
     // --- Cloud Sync Feature ---
     async function syncToSheet(action, data) {
-      if (!GOOGLE_WEB_APP_URL || GOOGLE_WEB_APP_URL.includes('YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL')) return;
+      if (!GOOGLE_WEB_APP_URL || GOOGLE_WEB_APP_URL.includes('https://script.google.com/macros/s/AKfycbzDPRMBSv9P-AbrtnlmcUWA6bWayU7NJYWlByc0DovCgZDkFx0D7eie_4g9llQKz7TvYg/exec')) return;
       try {
         const payload = enc({ action, data });
         await fetch(GOOGLE_WEB_APP_URL, {
@@ -221,7 +221,7 @@
 	
 	async function syncToSheet(action, data) {
 		if (!GOOGLE_WEB_APP_URL || 
-	GOOGLE_WEB_APP_URL.includes('YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL')) {
+	GOOGLE_WEB_APP_URL.includes('https://script.google.com/macros/s/AKfycbzDPRMBSv9P-AbrtnlmcUWA6bWayU7NJYWlByc0DovCgZDkFx0D7eie_4g9llQKz7TvYg/exec')) {
 		toast('Google Sheets URL is not configured.', 'error');
 		return;
 		}
