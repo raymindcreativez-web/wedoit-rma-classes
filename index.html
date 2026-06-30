@@ -204,62 +204,76 @@
     function showThanks(){ $('thankyou-quote').textContent=TEACHER_QUOTES[quoteIndex]; quoteIndex=(quoteIndex+1)%TEACHER_QUOTES.length; const c=$('thankyou-card'); c.classList.remove('hidden','pop-in'); void c.offsetWidth; c.classList.add('pop-in'); c.scrollIntoView({behavior:'smooth',block:'center'}); if(window.lucide) lucide.createIcons() }
     
     // --- Cloud Sync Feature ---
+    // Uses no-cors because Google Apps Script Web Apps can receive the POST
+    // even when the browser is not allowed to read the response.
     async function syncToSheet(action, data) {
-      if (!GOOGLE_WEB_APP_URL || GOOGLE_WEB_APP_URL.includes('YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL')) return;
+      if (!GOOGLE_WEB_APP_URL || GOOGLE_WEB_APP_URL.includes('YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL')) {
+        toast('Google Sheets URL is not configured.', 'error');
+        updateSyncIndicator('off');
+        return;
+      }
+
+      updateSyncIndicator('syncing');
+
       try {
         const payload = enc({ action, data });
+
         await fetch(GOOGLE_WEB_APP_URL, {
           method: 'POST',
+          mode: 'no-cors',
           body: payload,
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' } // Text/plain ignores aggressive CORS configs
+          headers: {
+            'Content-Type': 'text/plain;charset=utf-8'
+          }
         });
-      } catch(err) {
+
+        console.log('Sync request sent to Google Sheets:', action);
+        updateSyncIndicator('sent');
+      } catch (err) {
         console.error('Failed to sync to Google Sheets:', err);
+        updateSyncIndicator('error');
+        toast('Saved locally, but cloud sync failed.', 'error');
       }
     }
-	
-	
-	async function syncToSheet(action, data) {
-		if (!GOOGLE_WEB_APP_URL || 
-	GOOGLE_WEB_APP_URL.includes('YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL')) {
-		toast('Google Sheets URL is not configured.', 'error');
-		return;
-		}
 
-		try {
-			const payload = enc({ action, data });
+    function updateSyncIndicator(status) {
+      const syncLabel = $('sync-indicator');
+      if (!syncLabel) return;
 
-			const response = await fetch(GOOGLE_WEB_APP_URL, {
-				method: 'POST',
-				body: payload,
-				headers: {
-				'Content-Type': 'text/plain;charset=utf-8'
-			}
-		});
+      syncLabel.classList.remove(
+        'text-emerald-700', 'bg-emerald-50', 'border-emerald-100',
+        'text-amber-700', 'bg-amber-50', 'border-amber-200',
+        'text-blue-700', 'bg-blue-50', 'border-blue-200',
+        'text-rose-700', 'bg-rose-50', 'border-rose-200'
+      );
 
-			const result = await response.json();
+      if (status === 'off') {
+        syncLabel.innerHTML = '<i data-lucide="cloud-off" style="width:14px;height:14px"></i> Cloud Off';
+        syncLabel.classList.add('text-amber-700', 'bg-amber-50', 'border-amber-200');
+      } else if (status === 'syncing') {
+        syncLabel.innerHTML = '<i data-lucide="refresh-cw" style="width:14px;height:14px"></i> Syncing...';
+        syncLabel.classList.add('text-blue-700', 'bg-blue-50', 'border-blue-200');
+      } else if (status === 'sent') {
+        syncLabel.innerHTML = '<i data-lucide="cloud-check" style="width:14px;height:14px"></i> Sync Sent';
+        syncLabel.classList.add('text-emerald-700', 'bg-emerald-50', 'border-emerald-100');
+      } else if (status === 'error') {
+        syncLabel.innerHTML = '<i data-lucide="cloud-alert" style="width:14px;height:14px"></i> Sync Error';
+        syncLabel.classList.add('text-rose-700', 'bg-rose-50', 'border-rose-200');
+      }
 
-			if (!result.ok) {
-				console.error('Google Sheets error:', result);
-				toast('Saved locally, but Google Sheets sync failed.', 'error');
-				return;
-			}
-
-			toast('Synced to Google Sheets.');
-
-		} catch (err) {
-			console.error('Failed to sync to Google Sheets:', err);
-			toast('Saved locally, but cloud sync failed.', 'error');
-		}
-	}
+      if (window.lucide) lucide.createIcons();
+    }
 
     function verifySyncConfig() {
       const syncLabel = $('sync-indicator');
+      if (!syncLabel) return;
+
       if (!GOOGLE_WEB_APP_URL || GOOGLE_WEB_APP_URL.includes('YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL')) {
-        syncLabel.innerHTML = '<i data-lucide="cloud-off" style="width:14px;height:14px"></i> Cloud Off';
-        syncLabel.classList.remove('text-emerald-700', 'bg-emerald-50', 'border-emerald-100');
-        syncLabel.classList.add('text-amber-700', 'bg-amber-50', 'border-amber-200');
-        syncLabel.title = "Add your Google Apps Script URL in the code to enable Cloud Syncing.";
+        updateSyncIndicator('off');
+        syncLabel.title = 'Add your Google Apps Script Web App /exec URL in the code to enable Cloud Syncing.';
+      } else {
+        updateSyncIndicator('sent');
+        syncLabel.title = 'Google Sheets cloud sync is configured.';
       }
     }
 
