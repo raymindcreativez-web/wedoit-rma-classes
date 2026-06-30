@@ -205,7 +205,7 @@
     
     // --- Cloud Sync Feature ---
     async function syncToSheet(action, data) {
-      if (!GOOGLE_WEB_APP_URL || GOOGLE_WEB_APP_URL.includes('YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL')) return;
+      if (!GOOGLE_WEB_APP_URL || GOOGLE_WEB_APP_URL.includes('https://script.google.com/macros/s/AKfycbxQQ8WZvp8Ymow91W7t-ORaH26tSiqtUNlMc0mNePD-7TZxUOl8T0Y-8diS76h5yFvl/exec')) return;
       try {
         const payload = enc({ action, data });
         await fetch(GOOGLE_WEB_APP_URL, {
@@ -220,7 +220,7 @@
 
     function verifySyncConfig() {
       const syncLabel = $('sync-indicator');
-      if (!GOOGLE_WEB_APP_URL || GOOGLE_WEB_APP_URL.includes('YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL')) {
+      if (!GOOGLE_WEB_APP_URL || GOOGLE_WEB_APP_URL.includes('https://script.google.com/macros/s/AKfycbxQQ8WZvp8Ymow91W7t-ORaH26tSiqtUNlMc0mNePD-7TZxUOl8T0Y-8diS76h5yFvl/exec')) {
         syncLabel.innerHTML = '<i data-lucide="cloud-off" style="width:14px;height:14px"></i> Cloud Off';
         syncLabel.classList.remove('text-emerald-700', 'bg-emerald-50', 'border-emerald-100');
         syncLabel.classList.add('text-amber-700', 'bg-amber-50', 'border-amber-200');
