@@ -93,7 +93,7 @@
 
     <section class="card mt-6 rounded-[2rem] p-6 sm:p-8 fade-up flex flex-col sm:flex-row items-center gap-6" style="animation-delay:.1s">
       <div class="bg-white rounded-3xl p-4 shadow-sm border border-emerald-100 shrink-0"><canvas id="qr-canvas" width="150" height="150"></canvas></div>
-      <div class="text-center sm:text-left"><h2 class="display text-2xl sm:text-3xl font-bold text-emerald-950 leading-tight">Scan to Open This Form</h2><p class="mt-2 text-sm sm:text-base text-slate-600 leading-relaxed max-w-xl">This QR code points to the current page URL. Upload this file to your website and the QR will open the live form.</p></div>
+      <div class="text-center sm:text-left"><h2 class="display text-2xl sm:text-3xl font-bold text-emerald-950 leading-tight">Scan to Open This Form</h2><p class="mt-2 text-sm sm:text-base text-slate-600 leading-relaxed max-w-xl">This QR code points directly to the live intake form on GitHub Pages. Scan it with any mobile device to quickly submit new class entries on the go.</p></div>
     </section>
 
     <section id="thankyou-card" class="hidden card mt-6 rounded-[2rem] p-7 sm:p-9 text-center relative overflow-hidden">
@@ -204,76 +204,27 @@
     function showThanks(){ $('thankyou-quote').textContent=TEACHER_QUOTES[quoteIndex]; quoteIndex=(quoteIndex+1)%TEACHER_QUOTES.length; const c=$('thankyou-card'); c.classList.remove('hidden','pop-in'); void c.offsetWidth; c.classList.add('pop-in'); c.scrollIntoView({behavior:'smooth',block:'center'}); if(window.lucide) lucide.createIcons() }
     
     // --- Cloud Sync Feature ---
-    // Uses no-cors because Google Apps Script Web Apps can receive the POST
-    // even when the browser is not allowed to read the response.
     async function syncToSheet(action, data) {
-      if (!GOOGLE_WEB_APP_URL || GOOGLE_WEB_APP_URL.includes('YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL')) {
-        toast('Google Sheets URL is not configured.', 'error');
-        updateSyncIndicator('off');
-        return;
-      }
-
-      updateSyncIndicator('syncing');
-
+      if (!GOOGLE_WEB_APP_URL || GOOGLE_WEB_APP_URL.includes('YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL')) return;
       try {
         const payload = enc({ action, data });
-
         await fetch(GOOGLE_WEB_APP_URL, {
           method: 'POST',
-          mode: 'no-cors',
           body: payload,
-          headers: {
-            'Content-Type': 'text/plain;charset=utf-8'
-          }
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' } // Text/plain ignores aggressive CORS configs
         });
-
-        console.log('Sync request sent to Google Sheets:', action);
-        updateSyncIndicator('sent');
-      } catch (err) {
+      } catch(err) {
         console.error('Failed to sync to Google Sheets:', err);
-        updateSyncIndicator('error');
-        toast('Saved locally, but cloud sync failed.', 'error');
       }
-    }
-
-    function updateSyncIndicator(status) {
-      const syncLabel = $('sync-indicator');
-      if (!syncLabel) return;
-
-      syncLabel.classList.remove(
-        'text-emerald-700', 'bg-emerald-50', 'border-emerald-100',
-        'text-amber-700', 'bg-amber-50', 'border-amber-200',
-        'text-blue-700', 'bg-blue-50', 'border-blue-200',
-        'text-rose-700', 'bg-rose-50', 'border-rose-200'
-      );
-
-      if (status === 'off') {
-        syncLabel.innerHTML = '<i data-lucide="cloud-off" style="width:14px;height:14px"></i> Cloud Off';
-        syncLabel.classList.add('text-amber-700', 'bg-amber-50', 'border-amber-200');
-      } else if (status === 'syncing') {
-        syncLabel.innerHTML = '<i data-lucide="refresh-cw" style="width:14px;height:14px"></i> Syncing...';
-        syncLabel.classList.add('text-blue-700', 'bg-blue-50', 'border-blue-200');
-      } else if (status === 'sent') {
-        syncLabel.innerHTML = '<i data-lucide="cloud-check" style="width:14px;height:14px"></i> Sync Sent';
-        syncLabel.classList.add('text-emerald-700', 'bg-emerald-50', 'border-emerald-100');
-      } else if (status === 'error') {
-        syncLabel.innerHTML = '<i data-lucide="cloud-alert" style="width:14px;height:14px"></i> Sync Error';
-        syncLabel.classList.add('text-rose-700', 'bg-rose-50', 'border-rose-200');
-      }
-
-      if (window.lucide) lucide.createIcons();
     }
 
     function verifySyncConfig() {
       const syncLabel = $('sync-indicator');
-      if (!syncLabel) return;
-
       if (!GOOGLE_WEB_APP_URL || GOOGLE_WEB_APP_URL.includes('YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL')) {
-        updateSyncIndicator('off');
-        syncLabel.title = 'Add your Google Apps Script Web App /exec URL in the code to enable Cloud Syncing.';
-      } else {
-        updateSyncIndicator('sent');
-        syncLabel.title = 'Google Sheets cloud sync is configured.';
+        syncLabel.innerHTML = '<i data-lucide="cloud-off" style="width:14px;height:14px"></i> Cloud Off';
+        syncLabel.classList.remove('text-emerald-700', 'bg-emerald-50', 'border-emerald-100');
+        syncLabel.classList.add('text-amber-700', 'bg-amber-50', 'border-amber-200');
+        syncLabel.title = "Add your Google Apps Script URL in the code to enable Cloud Syncing.";
       }
     }
 
