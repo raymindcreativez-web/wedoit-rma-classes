@@ -111,12 +111,24 @@
           <div><label class="field-label" for="male_count">No. of Male Learners</label><input class="field-input" id="male_count" type="number" min="0" step="1" value="0" required></div>
           <div><label class="field-label" for="female_count">No. of Female Learners</label><input class="field-input" id="female_count" type="number" min="0" step="1" value="0" required></div>
           <div class="sm:col-span-2"><label class="field-label" for="total_count">Total Learners</label><input class="field-input" id="total_count" type="text" value="0" readonly></div>
-          <div class="sm:col-span-2 flex flex-wrap items-center gap-3 pt-1 no-print"><button id="submit-button" type="submit" class="btn-primary inline-flex items-center gap-2 px-6 py-3 rounded-xl font-extrabold transition disabled:opacity-60"><i data-lucide="save" style="width:18px;height:18px"></i><span id="submit-default-text">Submit</span><span id="submit-busy-text" class="hidden">Saving...</span></button><button id="cancel-button" type="button" class="btn-secondary hidden px-5 py-3 rounded-xl font-extrabold transition">Cancel Edit</button><button id="export-csv" type="button" class="btn-secondary inline-flex items-center gap-2 px-5 py-3 rounded-xl font-extrabold transition"><i data-lucide="download" style="width:18px;height:18px"></i> Export CSV</button></div>
+          <div class="sm:col-span-2 flex flex-wrap items-center gap-3 pt-1 no-print">
+            <button id="submit-button" type="submit" class="btn-primary inline-flex items-center gap-2 px-6 py-3 rounded-xl font-extrabold transition disabled:opacity-60"><i data-lucide="save" style="width:18px;height:18px"></i><span id="submit-default-text">Submit</span><span id="submit-busy-text" class="hidden">Saving...</span></button>
+            <button id="cancel-button" type="button" class="btn-secondary hidden px-5 py-3 rounded-xl font-extrabold transition">Cancel Edit</button>
+            <button id="export-csv" type="button" class="btn-secondary inline-flex items-center gap-2 px-5 py-3 rounded-xl font-extrabold transition"><i data-lucide="download" style="width:18px;height:18px"></i> Export CSV</button>
+          </div>
         </form>
       </section>
 
       <section class="card mt-6 rounded-[2rem] p-6 sm:p-8 fade-up" style="animation-delay:.2s">
-        <div class="flex items-center justify-between gap-3 flex-wrap"><div><h2 class="display text-2xl sm:text-3xl font-bold text-emerald-950">Submitted Class Roster</h2><p class="text-sm text-slate-500">Stored locally in this browser.</p></div><span id="roster-count" class="text-sm font-extrabold text-emerald-700 bg-emerald-50 px-4 py-2 rounded-full">0 entries</span></div>
+        <div class="flex items-center justify-between gap-3 flex-wrap">
+          <div><h2 class="display text-2xl sm:text-3xl font-bold text-emerald-950">Submitted Class Roster</h2><p class="text-sm text-slate-500">Stored locally and synced to <span class="font-semibold text-emerald-600">Google Sheets</span>.</p></div>
+          
+          <div class="flex items-center gap-2">
+            <span id="sync-indicator" class="text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-2 rounded-full border border-emerald-100 flex items-center gap-1 transition-colors"><i data-lucide="cloud-sync" style="width:14px;height:14px"></i> Cloud Sync</span>
+            <span id="roster-count" class="text-sm font-extrabold text-emerald-700 bg-emerald-50 px-4 py-2 rounded-full border border-emerald-100">0 entries</span>
+          </div>
+
+        </div>
         <p id="empty-state" class="text-center py-12 text-slate-400">No entries yet. Add your first class using the form above.</p>
         <div id="roster-wrap" class="hidden mt-5 overflow-x-auto table-scroll"><table class="w-full text-sm min-w-[760px]"><thead><tr class="text-left text-xs uppercase tracking-wide text-emerald-700 border-b border-emerald-100"><th class="py-3 pr-3 font-extrabold">Adviser</th><th class="py-3 px-3 font-extrabold">Grade / Section</th><th class="py-3 px-3 font-extrabold">Male</th><th class="py-3 px-3 font-extrabold">Female</th><th class="py-3 px-3 font-extrabold">Total</th><th class="py-3 px-3 font-extrabold">Submitted</th><th class="py-3 pl-3 font-extrabold text-right no-print">Actions</th></tr></thead><tbody id="roster-body"></tbody></table></div>
       </section>
@@ -139,34 +151,222 @@
       'You make a difference every day with your dedication and service.',
       'Every learner counted is every learner cared for.'
     ];
+
+    // =========================================================================
+    // GOOGLE SHEETS CLOUD SYNC SETTINGS
+    // =========================================================================
+    const GOOGLE_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzDPRMBSv9P-AbrtnlmcUWA6bWayU7NJYWlByc0DovCgZDkFx0D7eie_4g9llQKz7TvYg/exec';
+    
+    // --- Data Encryption for Security ---
+    function enc(obj) {
+      const str = JSON.stringify(obj);
+      const encoded = encodeURIComponent(str);
+      let res = '';
+      for(let i=0; i<encoded.length; i++) res += String.fromCharCode(encoded.charCodeAt(i) + 3);
+      return btoa(res);
+    }
+    
+    function dec(b64) {
+      try {
+        const res = atob(b64);
+        let decoded = '';
+        for(let i=0; i<res.length; i++) decoded += String.fromCharCode(res.charCodeAt(i) - 3);
+        return JSON.parse(decodeURIComponent(decoded));
+      } catch(e) { return null; }
+    }
+
+    // --- State and DOM Cache ---
     let records = [], editingId = null, toastTimer = null, quoteIndex = 0;
     const $ = id => document.getElementById(id);
     const form = $('intake-form'), maleInput = $('male_count'), femaleInput = $('female_count'), totalInput = $('total_count');
     const submitBtn = $('submit-button'), cancelBtn = $('cancel-button'), defaultText = $('submit-default-text'), busyText = $('submit-busy-text');
+    
+    // --- Utilities ---
     function id(){return 'rec_'+Date.now()+'_'+Math.random().toString(36).slice(2,9)}
     function num(v){const n=parseInt(v,10);return Number.isFinite(n)&&n>=0?n:0}
     function esc(v){return String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;')}
-    function load(){try{records=JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]'); if(!Array.isArray(records)) records=[]}catch{records=[]}}
-    function save(){localStorage.setItem(STORAGE_KEY,JSON.stringify(records))}
+    function load(){
+      try{
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if(raw) {
+          const parsed = dec(raw);
+          records = Array.isArray(parsed) ? parsed : [];
+        } else {
+          records = [];
+        }
+      }catch{records=[]}
+    }
+    function save(){localStorage.setItem(STORAGE_KEY, enc(records))}
     function recalcTotal(){totalInput.value=num(maleInput.value)+num(femaleInput.value)}
     function toast(msg,kind='success'){const wrap=$('toast-wrap'), t=$('toast'); t.textContent=msg; t.style.borderLeft='5px solid '+(kind==='error'?'#e11d48':'#059669'); wrap.classList.remove('hidden'); t.classList.remove('toast-in'); void t.offsetWidth; t.classList.add('toast-in'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>wrap.classList.add('hidden'),2800)}
     function setBusy(b){submitBtn.disabled=b; cancelBtn.disabled=b; defaultText.classList.toggle('hidden',b); busyText.classList.toggle('hidden',!b)}
     function fmt(iso){if(!iso)return '—'; const d=new Date(iso); return isNaN(d)?'—':d.toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'})}
     function showThanks(){ $('thankyou-quote').textContent=TEACHER_QUOTES[quoteIndex]; quoteIndex=(quoteIndex+1)%TEACHER_QUOTES.length; const c=$('thankyou-card'); c.classList.remove('hidden','pop-in'); void c.offsetWidth; c.classList.add('pop-in'); c.scrollIntoView({behavior:'smooth',block:'center'}); if(window.lucide) lucide.createIcons() }
+    
+    // --- Cloud Sync Feature ---
+    async function syncToSheet(action, data) {
+      if (!GOOGLE_WEB_APP_URL || GOOGLE_WEB_APP_URL.includes('YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL')) return;
+      try {
+        const payload = enc({ action, data });
+        await fetch(GOOGLE_WEB_APP_URL, {
+          method: 'POST',
+          body: payload,
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' } // Text/plain ignores aggressive CORS configs
+        });
+      } catch(err) {
+        console.error('Failed to sync to Google Sheets:', err);
+      }
+    }
+
+    function verifySyncConfig() {
+      const syncLabel = $('sync-indicator');
+      if (!GOOGLE_WEB_APP_URL || GOOGLE_WEB_APP_URL.includes('YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL')) {
+        syncLabel.innerHTML = '<i data-lucide="cloud-off" style="width:14px;height:14px"></i> Cloud Off';
+        syncLabel.classList.remove('text-emerald-700', 'bg-emerald-50', 'border-emerald-100');
+        syncLabel.classList.add('text-amber-700', 'bg-amber-50', 'border-amber-200');
+        syncLabel.title = "Add your Google Apps Script URL in the code to enable Cloud Syncing.";
+      }
+    }
+
+    // --- UI Interactions ---
     function exitEdit(){editingId=null; form.reset(); maleInput.value=0; femaleInput.value=0; recalcTotal(); defaultText.textContent='Submit'; cancelBtn.classList.add('hidden')}
-    function enterEdit(r){editingId=r.id; form.adviser_name.value=r.adviser_name||''; form.grade_level.value=r.grade_level||''; form.section.value=r.section||''; maleInput.value=r.male_count||0; femaleInput.value=r.female_count||0; recalcTotal(); defaultText.textContent='Update'; cancelBtn.classList.remove('hidden'); $('form-section').scrollIntoView({behavior:'smooth',block:'center'}); form.adviser_name.focus()}
-    function del(id){const r=records.find(x=>x.id===id); if(!r)return; if(!confirm('Delete this entry?\n\n'+r.adviser_name+' — '+r.grade_level+' '+r.section))return; records=records.filter(x=>x.id!==id); save(); if(editingId===id) exitEdit(); renderAll(); toast('Entry removed.')}
+    
+    function enterEdit(r){
+      editingId=r.id; 
+      form.adviser_name.value=r.adviser_name||''; 
+      form.grade_level.value=r.grade_level||''; 
+      form.section.value=r.section||''; 
+      maleInput.value=r.male_count||0; 
+      femaleInput.value=r.female_count||0; 
+      recalcTotal(); 
+      defaultText.textContent='Update'; 
+      cancelBtn.classList.remove('hidden'); 
+      $('form-section').scrollIntoView({behavior:'smooth',block:'center'}); 
+      form.adviser_name.focus();
+    }
+    
+    function del(id){
+      if(prompt('Enter password to delete this entry:') !== 'teacher123') { toast('Incorrect password', 'error'); return; }
+      const r=records.find(x=>x.id===id); 
+      if(!r)return; 
+      if(!confirm('Delete this entry?\n\n'+r.adviser_name+' — '+r.grade_level+' '+r.section))return; 
+      
+      records=records.filter(x=>x.id!==id); 
+      save(); 
+      if(editingId===id) exitEdit(); 
+      renderAll(); 
+      toast('Entry removed.');
+      
+      syncToSheet('delete', { id }); // Sync deletion to cloud
+    }
+    
+    // --- Rendering ---
     function renderStats(){const classes=records.length, learners=records.reduce((s,r)=>s+num(r.total_count),0), avg=classes?Math.round(learners/classes):0; $('stat-classes-value').textContent=classes; $('stat-learners-value').textContent=learners; $('stat-avg-value').textContent=avg; $('roster-count').textContent=classes+(classes===1?' entry':' entries')}
-    function renderRoster(){const body=$('roster-body'); body.innerHTML=''; [...records].sort((a,b)=>String(b.submitted_at||'').localeCompare(String(a.submitted_at||''))).forEach(r=>{const tr=document.createElement('tr'); tr.className='border-b border-slate-100 last:border-0 align-middle hover:bg-emerald-50/40 transition'; tr.innerHTML=`<td class="py-3 pr-3 font-bold text-slate-800">${esc(r.adviser_name||'—')}</td><td class="py-3 px-3 text-slate-600">${esc(r.grade_level||'—')} · ${esc(r.section||'—')}</td><td class="py-3 px-3 text-slate-600">${num(r.male_count)}</td><td class="py-3 px-3 text-slate-600">${num(r.female_count)}</td><td class="py-3 px-3 text-emerald-800 font-extrabold">${num(r.total_count)}</td><td class="py-3 px-3 text-slate-500">${fmt(r.submitted_at)}</td><td class="py-3 pl-3 no-print"><div class="flex items-center justify-end gap-2"><button type="button" class="edit p-2 rounded-lg text-emerald-700 hover:bg-emerald-100 transition" title="Edit"><i data-lucide="pencil" style="width:16px;height:16px"></i></button><button type="button" class="delete p-2 rounded-lg text-rose-600 hover:bg-rose-100 transition" title="Delete"><i data-lucide="trash-2" style="width:16px;height:16px"></i></button></div></td>`; tr.querySelector('.edit').onclick=()=>enterEdit(r); tr.querySelector('.delete').onclick=()=>del(r.id); body.appendChild(tr)}); const has=records.length>0; $('roster-wrap').classList.toggle('hidden',!has); $('empty-state').classList.toggle('hidden',has); if(window.lucide) lucide.createIcons()}
+    
+    function renderRoster(){
+      const body=$('roster-body'); 
+      body.innerHTML=''; 
+      [...records].sort((a,b)=>String(b.submitted_at||'').localeCompare(String(a.submitted_at||''))).forEach(r=>{
+        const tr=document.createElement('tr'); 
+        tr.className='border-b border-slate-100 last:border-0 align-middle hover:bg-emerald-50/40 transition'; 
+        tr.innerHTML=`<td class="py-3 pr-3 font-bold text-slate-800">${esc(r.adviser_name||'—')}</td><td class="py-3 px-3 text-slate-600">${esc(r.grade_level||'—')} · ${esc(r.section||'—')}</td><td class="py-3 px-3 text-slate-600">${num(r.male_count)}</td><td class="py-3 px-3 text-slate-600">${num(r.female_count)}</td><td class="py-3 px-3 text-emerald-800 font-extrabold">${num(r.total_count)}</td><td class="py-3 px-3 text-slate-500">${fmt(r.submitted_at)}</td><td class="py-3 pl-3 no-print"><div class="flex items-center justify-end gap-2"><button type="button" class="edit p-2 rounded-lg text-emerald-700 hover:bg-emerald-100 transition" title="Edit"><i data-lucide="pencil" style="width:16px;height:16px"></i></button><button type="button" class="delete p-2 rounded-lg text-rose-600 hover:bg-rose-100 transition" title="Delete"><i data-lucide="trash-2" style="width:16px;height:16px"></i></button></div></td>`; 
+        tr.querySelector('.edit').onclick=()=>enterEdit(r); 
+        tr.querySelector('.delete').onclick=()=>del(r.id); 
+        body.appendChild(tr)
+      }); 
+      const has=records.length>0; 
+      $('roster-wrap').classList.toggle('hidden',!has); 
+      $('empty-state').classList.toggle('hidden',has); 
+      if(window.lucide) lucide.createIcons()
+    }
+
     function drawGradeChart(){const canvas=$('chart-grades'), empty=$('chart-grades-empty'), cssW=canvas.clientWidth||700, dpr=window.devicePixelRatio||1, H=230; canvas.width=cssW*dpr; canvas.height=H*dpr; canvas.style.height=H+'px'; const ctx=canvas.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,cssW,H); const totals={}; GRADES.forEach(g=>totals[g]=0); records.forEach(r=>{if(totals[r.grade_level]!==undefined) totals[r.grade_level]+=num(r.total_count)}); const labels=GRADES.filter(g=>totals[g]>0), values=labels.map(g=>totals[g]); empty.classList.toggle('hidden',labels.length>0); canvas.style.display=labels.length?'block':'none'; if(!labels.length)return; const max=Math.max(1,...values), padL=36,padR=10,padB=38,padT=20, chartW=cssW-padL-padR, chartH=H-padB-padT, gap=14, barW=Math.max(16,(chartW-gap*(labels.length-1))/labels.length); ctx.strokeStyle='#ecfdf5'; for(let i=0;i<=4;i++){const y=padT+chartH-(chartH/4)*i;ctx.beginPath();ctx.moveTo(padL,y);ctx.lineTo(padL+chartW,y);ctx.stroke()} labels.forEach((g,i)=>{const x=padL+i*(barW+gap), h=(values[i]/max)*chartH, y=padT+chartH-h, grad=ctx.createLinearGradient(0,y,0,y+h); grad.addColorStop(0,'#10b981'); grad.addColorStop(1,'#047857'); ctx.fillStyle=grad; const rr=Math.min(8,barW/2,h/2); ctx.beginPath(); ctx.moveTo(x,y+rr); ctx.arcTo(x,y,x+rr,y,rr); ctx.arcTo(x+barW,y,x+barW,y+rr,rr); ctx.lineTo(x+barW,y+h); ctx.lineTo(x,y+h); ctx.closePath(); ctx.fill(); ctx.fillStyle='#064e3b'; ctx.font='800 12px Work Sans, sans-serif'; ctx.textAlign='center'; ctx.fillText(String(values[i]),x+barW/2,y-7); ctx.fillStyle='#059669'; ctx.font='700 12px Work Sans, sans-serif'; ctx.fillText(g.replace('Grade ','G'),x+barW/2,padT+chartH+23)})}
     function drawGenderChart(){const canvas=$('chart-gender'), size=190, dpr=window.devicePixelRatio||1; canvas.width=size*dpr; canvas.height=size*dpr; canvas.style.width=size+'px'; canvas.style.height=size+'px'; const ctx=canvas.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,size,size); const male=records.reduce((s,r)=>s+num(r.male_count),0), female=records.reduce((s,r)=>s+num(r.female_count),0), total=male+female; $('gender-male-count').textContent=male; $('gender-female-count').textContent=female; const cx=size/2, cy=size/2, R=76, inner=48; if(!total){ctx.beginPath(); ctx.arc(cx,cy,R,0,Math.PI*2); ctx.arc(cx,cy,inner,0,Math.PI*2,true); ctx.fillStyle='#d1fae5'; ctx.fill('evenodd'); ctx.fillStyle='#059669'; ctx.font='800 14px Work Sans, sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('No data',cx,cy); return} let start=-Math.PI/2; [{v:male,c:'#047857'},{v:female,c:'#34d399'}].forEach(s=>{if(s.v<=0)return; const ang=s.v/total*Math.PI*2; ctx.beginPath(); ctx.moveTo(cx,cy); ctx.arc(cx,cy,R,start,start+ang); ctx.closePath(); ctx.fillStyle=s.c; ctx.fill(); start+=ang}); ctx.beginPath(); ctx.arc(cx,cy,inner,0,Math.PI*2); ctx.fillStyle='#fff'; ctx.fill(); ctx.fillStyle='#064e3b'; ctx.font='700 26px Fraunces, serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(String(total),cx,cy-7); ctx.fillStyle='#059669'; ctx.font='800 10px Work Sans, sans-serif'; ctx.fillText('LEARNERS',cx,cy+16)}
     function renderAll(){renderStats(); renderRoster(); drawGradeChart(); drawGenderChart()}
+    
+    // --- Actions & Events ---
     function exportCSV(){if(!records.length){toast('No data to export.','error');return} const headers=['Adviser','Grade Level','Section','Male Count','Female Count','Total Count','Submitted At']; const rows=records.map(r=>[r.adviser_name,r.grade_level,r.section,r.male_count,r.female_count,r.total_count,r.submitted_at]); const csv=[headers,...rows].map(row=>row.map(c=>'"'+String(c??'').replaceAll('"','""')+'"').join(',')).join('\n'); const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'}), url=URL.createObjectURL(blob), a=document.createElement('a'); a.href=url; a.download='rapid-math-assessment-records.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); toast('CSV exported.')}
-    function generateQR(){const canvas=$('qr-canvas'); if(window.QRCode&&canvas) QRCode.toCanvas(canvas, location.href||'index.html',{width:150,margin:1,color:{dark:'#047857',light:'#ffffff'}},()=>{})}
-    maleInput.addEventListener('input',recalcTotal); femaleInput.addEventListener('input',recalcTotal); cancelBtn.addEventListener('click',exitEdit); $('thankyou-dismiss').addEventListener('click',()=>$('thankyou-card').classList.add('hidden')); $('export-csv').addEventListener('click',exportCSV); $('print-report').addEventListener('click',()=>print()); $('clear-data').addEventListener('click',()=>{if(!records.length){toast('There is no data to clear.','error');return} if(confirm('This will delete all saved entries from this browser. Continue?')){records=[];save();exitEdit();renderAll();toast('All entries cleared.')}});
-    form.addEventListener('submit',e=>{e.preventDefault(); if(!editingId&&records.length>=MAX_RECORDS){toast('Maximum of 999 entries reached.','error');return} const male=num(maleInput.value), female=num(femaleInput.value), payload={adviser_name:form.adviser_name.value.trim(),grade_level:form.grade_level.value,section:form.section.value.trim(),male_count:male,female_count:female,total_count:male+female}; if(!payload.adviser_name||!payload.grade_level||!payload.section){toast('Please complete all required fields.','error');return} setBusy(true); setTimeout(()=>{if(editingId){records=records.map(r=>r.id===editingId?{...r,...payload,updated_at:new Date().toISOString()}:r); save(); renderAll(); exitEdit(); toast('Entry updated.')}else{records.push({id:id(),...payload,submitted_at:new Date().toISOString()}); save(); renderAll(); exitEdit(); showThanks(); toast('Entry saved.')} setBusy(false)},220)});
+    function generateQR(){const canvas=$('qr-canvas'); if(window.QRCode&&canvas) QRCode.toCanvas(canvas, 'https://raymindcreativez-web.github.io/wedoit-rma-classes/',{width:150,margin:1,color:{dark:'#047857',light:'#ffffff'}},()=>{})}
+    
+    maleInput.addEventListener('input',recalcTotal); 
+    femaleInput.addEventListener('input',recalcTotal); 
+    cancelBtn.addEventListener('click',exitEdit); 
+    $('thankyou-dismiss').addEventListener('click',()=>$('thankyou-card').classList.add('hidden')); 
+    $('export-csv').addEventListener('click',exportCSV); 
+    $('print-report').addEventListener('click',()=>print()); 
+    
+    $('clear-data').addEventListener('click',()=>{
+      if(!records.length){toast('There is no data to clear.','error');return} 
+      if(prompt('Enter password to clear all data:') !== 'teacher123') { toast('Incorrect password', 'error'); return; }
+      if(confirm('This will delete all saved entries locally AND clear them from Google Sheets. Continue?')){
+        records=[];
+        save();
+        exitEdit();
+        renderAll();
+        toast('All entries cleared.');
+        
+        syncToSheet('clear_all', {}); // Sync clear all to cloud
+      }
+    });
+
+    form.addEventListener('submit',e=>{
+      e.preventDefault(); 
+      if(!editingId&&records.length>=MAX_RECORDS){toast('Maximum of 999 entries reached.','error');return} 
+      
+      const male=num(maleInput.value), female=num(femaleInput.value);
+      const payload={
+        adviser_name:form.adviser_name.value.trim(),
+        grade_level:form.grade_level.value,
+        section:form.section.value.trim(),
+        male_count:male,
+        female_count:female,
+        total_count:male+female
+      }; 
+      
+      if(!payload.adviser_name||!payload.grade_level||!payload.section){toast('Please complete all required fields.','error');return} 
+      
+      setBusy(true); 
+      setTimeout(()=>{
+        if(editingId){
+          let updatedRec;
+          records = records.map(r => {
+            if (r.id === editingId) {
+              updatedRec = {...r,...payload,updated_at:new Date().toISOString()};
+              return updatedRec;
+            }
+            return r;
+          });
+          save(); 
+          renderAll(); 
+          exitEdit(); 
+          toast('Entry updated.');
+
+          syncToSheet('update', updatedRec); // Sync update to cloud
+        } else {
+          const newRec = {id:id(),...payload,submitted_at:new Date().toISOString()};
+          records.push(newRec); 
+          save(); 
+          renderAll(); 
+          exitEdit(); 
+          showThanks(); 
+          toast('Entry saved.');
+
+          syncToSheet('add', newRec); // Sync new add to cloud
+        } 
+        setBusy(false)
+      }, 220)
+    });
+
     window.addEventListener('resize',drawGradeChart);
-    document.addEventListener('DOMContentLoaded',()=>{if(window.lucide) lucide.createIcons(); load(); recalcTotal(); renderAll(); generateQR()});
+    
+    document.addEventListener('DOMContentLoaded',()=>{
+      if(window.lucide) lucide.createIcons(); 
+      verifySyncConfig();
+      load(); 
+      recalcTotal(); 
+      renderAll(); 
+      generateQR();
+    });
   </script>
 </body>
 </html>

@@ -1,0 +1,130 @@
+// GOOGLE APPS SCRIPT BACKEND FOR RAPID MATH ASSESSMENT INTAKE
+// Google Sheet ID configuration
+const SHEET_ID = '18phMBhNZ1p5QYJTF8BLW6e7YRIQ1VxTzJs_7A7ghMY8loVVNOwIiUtPl';
+
+// Decryption utility to decode data sent by the frontend
+function dec(b64) {
+  try {
+    var decodedBytes = Utilities.base64Decode(b64);
+    var res = Utilities.newBlob(decodedBytes).getDataAsString();
+    var decoded = '';
+    for (var i = 0; i < res.length; i++) {
+      decoded += String.fromCharCode(res.charCodeAt(i) - 3);
+    }
+    return JSON.parse(decodeURIComponent(decoded));
+  } catch (e) {
+    return null;
+  }
+}
+
+function doPost(e) {
+  try {
+    // Open the spreadsheet and select the first sheet
+    var ss = SpreadsheetApp.openById(SHEET_ID);
+    var sheet = ss.getSheets()[0];
+    
+    // Parse the ENCRYPTED payload sent from the frontend HTML
+    var payload = dec(e.postData.contents);
+    
+    if (!payload) {
+      throw new Error("Invalid or corrupted encrypted payload.");
+    }
+    
+    var action = payload.action;
+    var data = payload.data;
+
+    // ----------------------------------------------------
+    // REQUIREMENT: Auto-create headers if they do not exist
+    // ----------------------------------------------------
+    var headers = ['ID', 'Adviser Name', 'Grade Level', 'Section', 'Male Learners', 'Female Learners', 'Total Learners', 'Submitted At', 'Updated At'];
+    
+    if (sheet.getLastRow() === 0) {
+      // Sheet is completely empty
+      sheet.appendRow(headers);
+      
+      // Optional: make headers bold
+      sheet.getRange(1, 1, 1, headers.length).setFontWeight("bold");
+    } else {
+      // Check if the first column of the first row is 'ID'
+      var firstRow = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+      if (firstRow[0] !== 'ID') {
+        // Data exists without headers, insert row at top
+        sheet.insertRowBefore(1);
+        sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+        sheet.getRange(1, 1, 1, headers.length).setFontWeight("bold");
+      }
+    }
+
+    // ----------------------------------------------------
+    // PROCESS ACTIONS (Add, Update, Delete, Clear All)
+    // ----------------------------------------------------
+    if (action === 'add') {
+      sheet.appendRow([
+        data.id, 
+        data.adviser_name, 
+        data.grade_level, 
+        data.section, 
+        data.male_count, 
+        data.female_count, 
+        data.total_count, 
+        data.submitted_at, 
+        data.updated_at || ''
+      ]);
+    } 
+    else if (action === 'update') {
+      var values = sheet.getDataRange().getValues();
+      for (var i = 1; i < values.length; i++) {
+        if (values[i][0] === data.id) {
+          // Update the specific row. i + 1 translates array index to Sheet row
+          sheet.getRange(i + 1, 2, 1, 8).setValues([[
+            data.adviser_name, 
+            data.grade_level, 
+            data.section, 
+            data.male_count, 
+            data.female_count, 
+            data.total_count, 
+            data.submitted_at, 
+            data.updated_at || ''
+          ]]);
+          break;
+        }
+      }
+    } 
+    else if (action === 'delete') {
+      var values = sheet.getDataRange().getValues();
+      for (var i = 1; i < values.length; i++) {
+        if (values[i][0] === data.id) {
+          sheet.deleteRow(i + 1);
+          break;
+        }
+      }
+    } 
+    else if (action === 'clear_all') {
+      var lastRow = sheet.getLastRow();
+      if (lastRow > 1) {
+        // Delete all rows except the header
+        sheet.deleteRows(2, lastRow - 1);
+      }
+    }
+
+    // Return success to frontend
+    return ContentService.createTextOutput(JSON.stringify({ status: 'success' }))
+      .setMimeType(ContentService.MimeType.JSON);
+      
+  } catch (error) {
+    // Return error to frontend
+    return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: error.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// Handling CORS preflight requests
+function doOptions(e) {
+  return ContentService.createTextOutput("")
+    .setMimeType(ContentService.MimeType.JSON)
+    .setHeaders({
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type"
+    });
+}
